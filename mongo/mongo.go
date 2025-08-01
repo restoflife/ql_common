@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/restoflife/ql_common/logger"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
-	"qingliu/logger"
 )
 
 var (

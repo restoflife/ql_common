@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/restoflife/ql_common/logger"
 	"go.uber.org/zap"
-	"qingliu/logger"
 )
 
 // redisMgr 保存所有命名的 Redis 客户端实例
