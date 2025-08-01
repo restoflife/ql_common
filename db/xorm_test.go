@@ -1,10 +1,3 @@
-/*
- * @Author:   admin
- * @IDE:      GoLand
- * @Date:     2025/8/1 14:12
- * @FilePath: qingliu/db/xorm_test.go
- */
-
 package db
 
 import (

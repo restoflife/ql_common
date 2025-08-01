@@ -1,4 +1,4 @@
-module qingliu/logger
+module github.com/restoflife/ql_common/logger
 
 go 1.24.3
 

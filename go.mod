@@ -1,4 +1,4 @@
-module qingliu
+module github.com/restoflife/ql_common
 
 go 1.24
 
