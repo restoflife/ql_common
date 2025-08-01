@@ -6,8 +6,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/restoflife/ql_common/logger"
 	"go.uber.org/zap"
-	"qingliu/logger"
 	"xorm.io/xorm"
 )
 
