@@ -43,7 +43,7 @@ type FormatterParams struct {
 	ErrorMessage string
 	isTerm       bool
 	BodySize     int
-	Keys         map[string]interface{}
+	Keys         map[any]any
 }
 
 // GinLogger 创建一个默认的日志中间件（使用 gin.DefaultWriter）
