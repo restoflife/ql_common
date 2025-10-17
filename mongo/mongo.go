@@ -22,7 +22,7 @@ var (
 )
 
 // MustBootUpMongo 初始化多个 Mongo 客户端
-func MustBootUpMongo(configs map[string]*Config) error {
+func MustBootUpMongo(configs map[string]*Config /*, mongoLog *zap.Logger*/) error {
 	for name, cfg := range configs {
 		err := func() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -39,6 +39,13 @@ func MustBootUpMongo(configs map[string]*Config) error {
 				}
 				clientOpts.SetAuth(cred)
 			}
+
+			// if mongoLog != nil {
+			// 	mongoLogger := logger.NewMongoLogger(mongoLog)
+			// 	mongoLogger.ShowMongo(true)
+			// 	// 获取配置了日志的客户端选项
+			// 	clientOpts = mongoLogger.GetClientOptions(cfg.URI)
+			// }
 
 			// TLS/CAFile
 			if cfg.CACertFile != "" {
