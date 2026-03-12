@@ -6,11 +6,11 @@ import (
 	"net/http/httputil"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mattn/go-isatty"
 	"go.uber.org/zap"
 )
 
@@ -23,7 +23,7 @@ var (
 	}
 
 	// 默认不记录日志的路径
-	notlogged = []string{"/favicon.ico"}
+	notlogged = []string{"/favicon.ico", "/health", "/ready"}
 )
 
 // ConfigGin 配置 Gin 日志中间件的结构体
@@ -44,6 +44,8 @@ type FormatterParams struct {
 	isTerm       bool
 	BodySize     int
 	Keys         map[any]any
+	RequestID    string
+	ResponseTime int64 // 响应时间（毫秒）
 }
 
 // GinLogger 创建一个默认的日志中间件（使用 gin.DefaultWriter）
@@ -59,6 +61,28 @@ func WithWriter(logger *zap.Logger, out io.Writer, notlogged ...string) gin.Hand
 	})
 }
 
+// formatBodySize 格式化响应体大小
+func formatBodySize(bytes int) string {
+	if bytes < 1024 {
+		return "< 1KB"
+	}
+	if bytes < 1024*1024 {
+		return "< 1MB"
+	}
+	return "> 1MB"
+}
+
+// formatLatency 格式化延迟时间
+func formatLatency(latency time.Duration) string {
+	if latency < time.Millisecond {
+		return "< 1ms"
+	}
+	if latency < time.Second {
+		return strconv.FormatInt(latency.Milliseconds(), 10) + "ms"
+	}
+	return latency.String()
+}
+
 // WithConfig 使用指定配置构建 Gin 日志中间件
 func WithConfig(log *zap.Logger, conf ConfigGin) gin.HandlerFunc {
 	// 设置日志输出目标
@@ -67,15 +91,8 @@ func WithConfig(log *zap.Logger, conf ConfigGin) gin.HandlerFunc {
 		out = gin.DefaultWriter
 	}
 
-	// 判断输出是否为终端（决定是否彩色输出等）
-	isTerm := true
-	if w, ok := out.(*os.File); !ok || os.Getenv("TERM") == "dumb" ||
-		(!isatty.IsTerminal(w.Fd()) && !isatty.IsCygwinTerminal(w.Fd())) {
-		isTerm = false
-	}
-
 	// 构建跳过路径的 map
-	skip := make(map[string]struct{})
+	skip := make(map[string]struct{}, len(conf.SkipPaths))
 	for _, path := range conf.SkipPaths {
 		skip[path] = struct{}{}
 	}
@@ -85,35 +102,52 @@ func WithConfig(log *zap.Logger, conf ConfigGin) gin.HandlerFunc {
 		start := time.Now()           // 请求开始时间
 		path := c.Request.URL.Path    // 请求路径
 		raw := c.Request.URL.RawQuery // 请求查询参数
-		c.Next()                      // 继续处理请求（执行后续中间件及业务逻辑）
+
+		c.Next() // 继续处理请求（执行后续中间件及业务逻辑）
 
 		// 判断是否需要跳过日志
 		if _, ok := skip[path]; !ok {
-			param := FormatterParams{
-				Request:      c.Request,
-				isTerm:       isTerm,
-				Keys:         c.Keys,
-				Latency:      time.Since(start),
-				ClientIP:     c.ClientIP(),
-				Method:       c.Request.Method,
-				StatusCode:   c.Writer.Status(),
-				ErrorMessage: c.Errors.ByType(gin.ErrorTypePrivate).String(),
-				BodySize:     c.Writer.Size(),
-			}
+			latency := time.Since(start)
+			statusCode := c.Writer.Status()
+			errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
 
+			// 优化：只在需要时拼接查询参数
+			fullPath := path
 			if raw != "" {
-				path = path + "?" + raw
+				fullPath = path + "?" + raw
 			}
-			param.Path = path
 
-			// 没有错误时输出 info 日志
-			if len(param.ErrorMessage) == 0 {
-				log.Info("[gin]",
-					zap.String("path", path),
-					zap.Int("code", param.StatusCode),
-					zap.String("method", param.Method),
+			// 根据状态码选择日志级别
+			if errorMessage != "" || statusCode >= http.StatusInternalServerError {
+				// 错误日志
+				log.Error("[gin]",
+					zap.String("path", fullPath),
+					zap.Int("code", statusCode),
+					zap.String("method", c.Request.Method),
+					zap.String("client_ip", c.ClientIP()),
 					zap.String("user-agent", c.Request.UserAgent()),
-					zap.String("latency", param.Latency.String()),
+					zap.String("latency", formatLatency(latency)),
+					zap.String("error", errorMessage),
+				)
+			} else if statusCode >= http.StatusBadRequest {
+				// 警告日志（4xx 错误）
+				log.Warn("[gin]",
+					zap.String("path", fullPath),
+					zap.Int("code", statusCode),
+					zap.String("method", c.Request.Method),
+					zap.String("client_ip", c.ClientIP()),
+					zap.String("latency", formatLatency(latency)),
+				)
+			} else {
+				// info 日志（正常请求）
+				log.Info("[gin]",
+					zap.String("path", fullPath),
+					zap.Int("code", statusCode),
+					zap.String("method", c.Request.Method),
+					zap.String("client_ip", c.ClientIP()),
+					zap.String("user-agent", c.Request.UserAgent()),
+					zap.String("latency", formatLatency(latency)),
+					// zap.Int("body_size", c.Writer.Size()),
 				)
 			}
 		}
@@ -129,21 +163,29 @@ func Recovery(logger *zap.Logger) gin.HandlerFunc {
 
 		defer func() {
 			var rawReq []byte
-			// 尝试将请求 dump 出来，便于日志排查
-			if c.Request != nil {
-				rawReq, _ = httputil.DumpRequest(c.Request, true)
+			// 尝试将请求 dump 出来，便于日志排查（仅在非生产环境或开启调试时）
+			if c.Request != nil && os.Getenv("GIN_DEBUG") == "true" {
+				rawReq, _ = httputil.DumpRequest(c.Request, false)
 			}
 
 			// 捕获 panic 并记录日志
 			if err := recover(); err != nil {
+				// 获取堆栈信息
 				stack = stack[:runtime.Stack(stack, false)]
-				logger.Error("[recovery]",
+				logger.Error("[panic recovery]",
 					zap.String("path", c.Request.RequestURI),
+					zap.String("method", c.Request.Method),
+					zap.String("client_ip", c.ClientIP()),
 					zap.Any("error", err),
 					zap.ByteString("request", rawReq),
 					zap.String("stack", string(stack)),
 				)
-				c.AbortWithStatus(http.StatusInternalServerError)
+
+				// 返回友好的错误响应
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"code":    500,
+					"message": "Internal server error",
+				})
 			}
 		}()
 
