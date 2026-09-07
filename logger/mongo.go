@@ -62,7 +62,7 @@ func (m *MongoLogger) commandStarted(ctx context.Context, evt *event.CommandStar
 
 // commandSucceeded provides the corresponding package operation.
 func (m *MongoLogger) commandSucceeded(ctx context.Context, evt *event.CommandSucceededEvent) {
-	if !m.show.Load() {
+	if !m.show.Load() || evt.CommandName == "endSessions" {
 		return
 	}
 

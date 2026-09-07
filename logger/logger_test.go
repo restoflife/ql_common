@@ -147,6 +147,7 @@ func TestDatabaseAdaptersOnlyAttachCallerToErrors(t *testing.T) {
 
 	mongoLogger := NewMongoLogger(base)
 	mongoLogger.commandSucceeded(context.Background(), &event.CommandSucceededEvent{CommandFinishedEvent: event.CommandFinishedEvent{CommandName: "ping", DatabaseName: "admin"}})
+	mongoLogger.commandSucceeded(context.Background(), &event.CommandSucceededEvent{CommandFinishedEvent: event.CommandFinishedEvent{CommandName: "endSessions", DatabaseName: "admin"}})
 	mongoLogger.commandFailed(context.Background(), &event.CommandFailedEvent{CommandFinishedEvent: event.CommandFinishedEvent{CommandName: "find", DatabaseName: "test"}, Failure: errors.New("failed")})
 
 	xormLogger := NewXormLogger(base)
