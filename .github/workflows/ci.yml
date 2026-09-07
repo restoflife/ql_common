@@ -1,0 +1,62 @@
+name: Go
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  unit:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: go test -cover ./...
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: ql_common_test
+          MYSQL_ROOT_HOST: "%"
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest_password"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+      redis:
+        image: redis:7.4
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      mongo:
+        image: mongo:8.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: test_user
+          MONGO_INITDB_ROOT_PASSWORD: test_password
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ping:1})'"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race -tags=integration -count=1 -timeout=3m ./...
+        env:
+          QL_TEST_MYSQL_DSN: root:test_password@tcp(127.0.0.1:3306)/ql_common_test?parseTime=true
+          QL_TEST_REDIS_ADDR: 127.0.0.1:6379
+          QL_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+          QL_TEST_MONGO_USER: test_user
+          QL_TEST_MONGO_PASSWORD: test_password
