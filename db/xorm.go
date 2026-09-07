@@ -2,103 +2,146 @@ package db
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"math"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/restoflife/ql_common/internal/registry"
 	"github.com/restoflife/ql_common/logger"
 	"go.uber.org/zap"
 	"xorm.io/xorm"
 )
 
-// 存储所有的数据库引擎组（主从）
-var dbMgr = map[string]*xorm.EngineGroup{}
+var dbMgr registry.Registry[*xorm.EngineGroup]
 
-// MustBootUpXORM 初始化并启动 XORM 引擎（可支持多个数据库配置）
+// MustBootUpXORM is the compatibility entry point. MaxLife is measured in seconds.
+// Deprecated: Use BootUpXORMContext.
 func MustBootUpXORM(configs map[string]*XORMConfigLite, sqlLog *zap.Logger, opts ...Option) error {
-	options := newOptions(opts...)
-
-	for name, c := range configs {
-		// 创建主库连接
-		master, err := xorm.NewEngine(c.Driver, c.Dsn)
-		if err != nil {
-			return err
-		}
-
-		// 创建从库连接
-		slaves := make([]*xorm.Engine, len(c.Slave))
-		for i, s := range c.Slave {
-			slave, x := xorm.NewEngine(c.Driver, s.Dsn)
-			if x != nil {
-				return x
-			}
-			slaves[i] = slave
-		}
-
-		// 创建主从引擎组
-		db, err := xorm.NewEngineGroup(master, slaves)
-		if err != nil {
-			return err
-		}
-
-		// 设置 SQL 日志
-		db.SetLogger(logger.NewXormLogger(sqlLog))
-		db.ShowSQL(c.ShowSql)
-
-		// 设置连接池参数
-		if c.MaxIdle > 0 {
-			db.SetMaxIdleConns(c.MaxIdle)
-		}
-		if c.MaxOpen > 0 {
-			db.SetMaxOpenConns(c.MaxOpen)
-		}
-		if c.MaxLife > 0 {
-			db.SetConnMaxLifetime(time.Millisecond * time.Duration(c.MaxLife))
-		}
-
-		// 测试连接
-		if err = db.Ping(); err != nil {
-			return err
-		}
-
-		// 防止重复加载相同名字的数据库连接
-		if _, ok := dbMgr[name]; ok {
-			return fmt.Errorf("database components loaded twice：[%s]", name)
-		}
-
-		// 同步数据库结构（如果设置了同步）
-		if options.sync != nil && c.Synchronization {
-			if err = options.sync(name, db); err != nil {
-				return err
-			}
-		}
-
-		// 保存引擎组
-		dbMgr[name] = db
-		sqlLog.Info("XORM连接成功", zap.String("name", name))
-	}
-
-	// 定时健康检查（每 5 小时 ping 一次）
-	go func() {
-		ticker := time.NewTicker(time.Hour * 5)
-		for {
-			select {
-			case <-ticker.C:
-				for _, v := range dbMgr {
-					if err := v.Ping(); err != nil {
-						sqlLog.Error("mysql ticker ping database fail", zap.Error(err))
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return BootUpXORMContext(ctx, configs, sqlLog, opts...)
 }
 
-// Transaction 封装事务操作逻辑
+// BootUpXORMContext initializes a batch atomically. Schema synchronization side
+// effects cannot be rolled back; the sync callback must not call boot/shutdown.
+func BootUpXORMContext(ctx context.Context, configs map[string]*XORMConfigLite, sqlLog *zap.Logger, opts ...Option) error {
+	if ctx == nil {
+		return ErrNilContext
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if sqlLog == nil {
+		sqlLog = zap.NewNop()
+	}
+	opt := newOptions(opts...)
+	names := make([]string, 0, len(configs))
+	for name, c := range configs {
+		if c == nil || c.Driver == "" || c.Dsn == "" {
+			return databaseConfigError(name, "driver and DSN are required")
+		}
+		if c.MaxIdle < 0 || c.MaxOpen < 0 || c.MaxLife < 0 || int64(c.MaxLife) > math.MaxInt64/int64(time.Second) {
+			return databaseConfigError(name, "invalid pool settings")
+		}
+		if c.MaxOpen > 0 && c.MaxIdle > c.MaxOpen {
+			return databaseConfigError(name, "max_idle exceeds max_open")
+		}
+		for _, slave := range c.Slave {
+			if slave.Dsn == "" {
+				return databaseConfigError(name, "slave DSN is empty")
+			}
+		}
+		if len(c.SlavePools) != 0 && len(c.SlavePools) != len(c.Slave) {
+			return databaseConfigError(name, "slave pool count mismatch")
+		}
+		pools := append([]PoolConfig(nil), c.SlavePools...)
+		if c.MasterPool != nil {
+			pools = append(pools, *c.MasterPool)
+		}
+		for _, pool := range pools {
+			if pool.MaxIdle < 0 || pool.MaxOpen < 0 || pool.Lifetime < 0 || (pool.MaxOpen > 0 && pool.MaxIdle > pool.MaxOpen) {
+				return databaseConfigError(name, "invalid engine pool")
+			}
+		}
+		names = append(names, name)
+	}
+	return dbMgr.Init(names, func(name string) (_ *xorm.EngineGroup, err error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c := configs[name]
+		engines := make([]*xorm.Engine, 0, 1+len(c.Slave))
+		committed := false
+		defer func() {
+			if !committed {
+				for _, engine := range engines {
+					err = errors.Join(err, engine.Close())
+				}
+			}
+		}()
+		master, err := xorm.NewEngine(c.Driver, c.Dsn)
+		if err != nil {
+			return nil, err
+		}
+		engines = append(engines, master)
+		for _, slave := range c.Slave {
+			engine, err := xorm.NewEngine(c.Driver, slave.Dsn)
+			if err != nil {
+				return nil, err
+			}
+			engines = append(engines, engine)
+		}
+		group, err := xorm.NewEngineGroup(master, engines[1:])
+		if err != nil {
+			return nil, err
+		}
+		group.SetLogger(logger.NewXormLogger(sqlLog))
+		group.ShowSQL(c.ShowSql)
+		if c.MaxIdle > 0 {
+			group.SetMaxIdleConns(c.MaxIdle)
+		}
+		if c.MaxOpen > 0 {
+			group.SetMaxOpenConns(c.MaxOpen)
+		}
+		if c.MaxLife > 0 {
+			group.SetConnMaxLifetime(time.Second * time.Duration(c.MaxLife))
+		}
+		apply := func(engine *xorm.Engine, pool PoolConfig) {
+			engine.SetMaxIdleConns(pool.MaxIdle)
+			engine.SetMaxOpenConns(pool.MaxOpen)
+			engine.SetConnMaxLifetime(pool.Lifetime)
+		}
+		if c.MasterPool != nil {
+			apply(master, *c.MasterPool)
+		}
+		for i, pool := range c.SlavePools {
+			apply(engines[i+1], pool)
+		}
+		for _, engine := range engines {
+			if err = engine.PingContext(ctx); err != nil {
+				return nil, err
+			}
+		}
+		sqlLog.WithOptions(zap.WithCaller(false)).Info("MySQL ping database succeeded", zap.String("name", name))
+		if opt.sync != nil && c.Synchronization {
+			if err = opt.sync(name, group); err != nil {
+				return nil, err
+			}
+		}
+		if err = ctx.Err(); err != nil {
+			return nil, err
+		}
+		committed = true
+		return group, nil
+	}, closeEngineGroup)
+}
+
+// Transaction provides the corresponding package operation.
 func Transaction(ctx context.Context, name string, fn func(*xorm.Session) error) (err error) {
+	if fn == nil {
+		return ErrNilTransactionCallback
+	}
 	session, err := NewSessionContext(ctx, name)
 	if err != nil {
 		return err
@@ -109,16 +152,27 @@ func Transaction(ctx context.Context, name string, fn func(*xorm.Session) error)
 		return err
 	}
 
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			_ = session.Rollback()
+			panic(recovered)
+		}
+	}()
 	if err = fn(session); err != nil {
-		_ = session.Rollback()
-		return err
+		return errors.Join(err, session.Rollback())
 	}
 
 	return session.Commit()
 }
 
-// NewSessionContext 获取一个绑定 context 的数据库会话（需手动释放）
+// NewSessionContext provides the corresponding package operation.
 func NewSessionContext(ctx context.Context, name string) (*xorm.Session, error) {
+	if ctx == nil {
+		return nil, ErrNilContext
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if g, e := get(name); e == nil {
 		return g.NewSession().Context(ctx), nil
 	} else {
@@ -126,7 +180,8 @@ func NewSessionContext(ctx context.Context, name string) (*xorm.Session, error) 
 	}
 }
 
-// NewSession 获取一个数据库会话（需手动释放）
+// NewSession provides the corresponding package operation.
+// Deprecated: Use NewSessionContext.
 func NewSession(name string) (*xorm.Session, error) {
 	if g, e := get(name); e == nil {
 		return g.NewSession(), nil
@@ -135,58 +190,65 @@ func NewSession(name string) (*xorm.Session, error) {
 	}
 }
 
-// 获取对应数据库名称的引擎组
-func get(name string) (*xorm.EngineGroup, error) {
-	g, ok := dbMgr[name]
-	if !ok {
-		return nil, fmt.Errorf("database does not exist:[%s]", name)
-	}
-	return g, nil
-}
+// GetEngineGroup returns a shared group; requests must not close it.
+func GetEngineGroup(name string) (*xorm.EngineGroup, error) { return dbMgr.Get(name) }
 
-// Close 关闭 XORM 会话
+func get(name string) (*xorm.EngineGroup, error) { return dbMgr.Get(name) }
+
+// Close provides the corresponding package operation.
 func Close(session *xorm.Session) {
+	if session == nil {
+		return
+	}
 	if err := session.Close(); err != nil {
-		// 可以添加日志记录
 		return
 	}
 }
 
-// ShutdownXorm 应用退出时关闭所有数据库连接
+// ShutdownXorm provides the corresponding package operation.
+// Deprecated: Use ShutdownXormE.
 func ShutdownXorm() {
-	for _, v := range dbMgr {
-		if err := v.Close(); err != nil {
-			// 可以添加日志记录
-			continue
-		}
+	if err := ShutdownXormE(); err != nil {
+		logger.Error("XORM shutdown failed", zap.Error(err))
 	}
 }
 
-// 同步函数类型（可用于同步数据库结构）
+// ShutdownXormE closes and unregisters every engine; call after draining requests.
+func ShutdownXormE() error { return dbMgr.Close(closeEngineGroup) }
+
+func closeEngineGroup(g *xorm.EngineGroup) error {
+	result := g.Master().Close()
+	for _, slave := range g.Slaves() {
+		result = errors.Join(result, slave.Close())
+	}
+	return result
+}
+
 type syncFunc func(string, *xorm.EngineGroup) error
 
-// Options 用于配置 BootUp 的可选参数
+// Options provides the corresponding package operation.
 type Options struct {
 	sync syncFunc
 }
 
-// Option 是对 Options 的函数式配置
+// Option provides the corresponding package operation.
 type Option func(*Options)
 
-// SetSyncFunc 设置同步函数
+// SetSyncFunc provides the corresponding package operation.
 func SetSyncFunc(f syncFunc) Option {
 	return func(o *Options) {
 		o.sync = f
 	}
 }
 
-// 解析所有 Option
 func newOptions(opts ...Option) Options {
 	opt := Options{
 		sync: nil,
 	}
 	for _, o := range opts {
-		o(&opt)
+		if o != nil {
+			o(&opt)
+		}
 	}
 	return opt
 }

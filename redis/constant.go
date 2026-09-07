@@ -1,8 +1,8 @@
 package redis
 
 const (
-	// SENTINEL 哨兵
+	// SENTINEL provides the corresponding package operation.
 	SENTINEL = "sentinel"
-	// CLUSTER 集群
+	// CLUSTER provides the corresponding package operation.
 	CLUSTER = "cluster"
 )

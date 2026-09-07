@@ -1,8 +1,12 @@
 package logger
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -10,18 +14,18 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Config 定义日志系统的配置结构体
+// Config provides the corresponding package operation.
 type Config struct {
-	Level      string `json:"level"`       // 文件日志输出等级（如 "info"、"debug"）
-	Filename   string `json:"file"`        // 日志文件路径
-	MaxSize    int    `json:"max_size"`    // 每个日志文件最大尺寸（MB）
-	MaxBackups int    `json:"max_backups"` // 保留的旧日志文件个数
-	MaxAge     int    `json:"max_age"`     // 保留旧日志的最大天数
-	Console    string `json:"console"`     // 控制台输出的日志等级
-	Format     string `json:"format"`      // 输出格式："json" 或 "text"
+	Level      string `json:"level"`
+	Filename   string `json:"file"`
+	MaxSize    int    `json:"max_size"`
+	MaxBackups int    `json:"max_backups"`
+	MaxAge     int    `json:"max_age"`
+	Console    string `json:"console"`
+	Format     string `json:"format"`
+	CallerSkip int    `json:"caller_skip"`
 }
 
-// 默认配置值
 const (
 	DefaultLevel   = "info"
 	DefaultMaxSize = 10 // MB
@@ -29,12 +33,16 @@ const (
 )
 
 var (
-	mu         sync.Mutex    // 互斥锁，确保并发安全
-	allLoggers []*zap.Logger // 存储所有初始化过的 logger
-	defaultLog *zap.Logger   // 默认 logger 实例
+	lifecycle         sync.Mutex
+	mu                sync.Mutex
+	allLoggers        []*zap.Logger
+	defaultLog        atomic.Pointer[zap.Logger]
+	defaultCallerSkip atomic.Int32
+	logClosers        []io.Closer
+	nopLog            = zap.NewNop()
 )
 
-// GetAll 返回所有注册的日志实例
+// GetAll provides the corresponding package operation.
 func GetAll() []*zap.Logger {
 	mu.Lock()
 	defer mu.Unlock()
@@ -43,47 +51,94 @@ func GetAll() []*zap.Logger {
 	return result
 }
 
-// New 初始化默认日志实例
+// New provides the corresponding package operation.
+// New initializes the default logger, panicking on invalid configuration.
+// Prefer Init when configuration comes from users or files.
+// Deprecated: Use Init.
 func New(g *Config) {
-	// 设置默认值
-	if g.Level == "" {
-		g.Level = DefaultLevel
+	if err := Init(g); err != nil {
+		panic(err)
 	}
-	if g.MaxSize == 0 {
-		g.MaxSize = DefaultMaxSize
-	}
-	if g.Format == "" {
-		g.Format = DefaultFormat
-	}
-
-	defaultLog = g.newLogger()
 }
 
-// newLogger 基于当前配置创建新的 zap.Logger 实例（内部使用，不添加到全局列表）
-func (l *Config) newLogger() *zap.Logger {
-	// 根据格式创建 encoder（编码器）
-	encoder := createEncoder(l.Format, false)     // 用于文件
-	consoleEncoder := createEncoder("text", true) // 用于控制台
+// Init validates a copy of the config and safely publishes the default logger.
+func Init(g *Config) error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	l, err := g.Build()
+	if err != nil {
+		return err
+	}
+	defaultLog.Store(l)
+	var callerSkip int
+	if g != nil {
+		callerSkip = g.CallerSkip
+	}
+	defaultCallerSkip.Store(int32(callerSkip))
+	return nil
+}
 
-	// 构建多个输出核心（core），文件 + 控制台
+func normalized(g *Config) (Config, error) {
+	var c Config
+	if g != nil {
+		c = *g
+	}
+	if c.Level == "" {
+		c.Level = DefaultLevel
+	}
+	if c.MaxSize == 0 {
+		c.MaxSize = DefaultMaxSize
+	}
+	if c.Format == "" {
+		c.Format = DefaultFormat
+	}
+	if c.Filename == "" && c.Console == "" {
+		c.Console = c.Level
+	}
+	if createLevelEnablerFunc(c.Level) == nil {
+		return c, fmt.Errorf("%w: %q", ErrInvalidFileLevel, c.Level)
+	}
+	if c.Console != "" && createLevelEnablerFunc(c.Console) == nil {
+		return c, fmt.Errorf("%w: %q", ErrInvalidConsoleLevel, c.Console)
+	}
+	if c.Format != "json" && c.Format != "text" {
+		return c, fmt.Errorf("%w: %q", ErrInvalidFormat, c.Format)
+	}
+	if c.CallerSkip < 0 {
+		return c, ErrInvalidCallerSkip
+	}
+	if c.MaxSize < 0 || c.MaxBackups < 0 || c.MaxAge < 0 {
+		return c, ErrInvalidRotation
+	}
+	return c, nil
+}
+
+// Build constructs and registers a logger. An empty filename disables file output.
+func (g *Config) Build() (*zap.Logger, error) {
+	c, err := normalized(g)
+	if err != nil {
+		return nil, err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	l := c.newLogger()
+	allLoggers = append(allLoggers, l)
+	return l, nil
+}
+
+// newLogger builds a logger from a normalized configuration.
+func (l *Config) newLogger() *zap.Logger {
+	encoder := createEncoder(l.Format, false)
+	consoleEncoder := createEncoder("text", true)
+
 	cores := make([]zapcore.Core, 0, 2)
 
-	// 始终添加文件 core
-	cores = append(cores,
-		zapcore.NewCore(
-			encoder,
-			zapcore.AddSync(&lumberjack.Logger{
-				Filename:   l.Filename,
-				MaxSize:    l.MaxSize,
-				MaxBackups: l.MaxBackups,
-				MaxAge:     l.MaxAge,
-				LocalTime:  true,
-			}),
-			createLevelEnablerFunc(l.Level),
-		),
-	)
+	if l.Filename != "" {
+		writer := &lumberjack.Logger{Filename: l.Filename, MaxSize: l.MaxSize, MaxBackups: l.MaxBackups, MaxAge: l.MaxAge, LocalTime: true}
+		logClosers = append(logClosers, writer)
+		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(writer), createLevelEnablerFunc(l.Level)))
+	}
 
-	// 只有当控制台级别有效时才添加控制台 core
 	if consoleLevel := createLevelEnablerFunc(l.Console); consoleLevel != nil {
 		cores = append(cores,
 			zapcore.NewCore(
@@ -94,36 +149,41 @@ func (l *Config) newLogger() *zap.Logger {
 		)
 	}
 
-	// 创建 logger
-	return zap.New(zapcore.NewTee(cores...))
+	core := errorCallerCore{Core: zapcore.NewTee(cores...)}
+	return zap.New(core, zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel))
 }
 
-// NewLogger 基于当前配置创建新的 zap.Logger 实例（公开版本，会添加到全局列表）
+// NewLogger provides the corresponding package operation.
+// Deprecated: Use Config.Build.
 func (l *Config) NewLogger() *zap.Logger {
-	logger := l.newLogger()
-
-	// 注册到全局 logger 列表中
-	mu.Lock()
-	allLoggers = append(allLoggers, logger)
-	mu.Unlock()
-
-	return logger
-}
-
-// Logger 返回默认 logger 实例，若未初始化则返回 nil
-func Logger() *zap.Logger {
-	return defaultLog
-}
-
-// MustLogger 返回默认 logger 实例，若未初始化则 panic
-func MustLogger() *zap.Logger {
-	if defaultLog == nil {
-		panic("logger not initialized, call New first")
+	result, err := l.Build()
+	if err != nil {
+		panic(err)
 	}
-	return defaultLog
+	return result
 }
 
-// createLevelEnablerFunc 根据字符串日志级别创建 zap.LevelEnablerFunc
+// Logger provides the corresponding package operation.
+func Logger() *zap.Logger {
+	return defaultLog.Load()
+}
+
+// MustLogger provides the corresponding package operation.
+func MustLogger() *zap.Logger {
+	if l := defaultLog.Load(); l != nil {
+		return l
+	}
+	panic("logger not initialized, call Init or New first")
+}
+
+func current() *zap.Logger {
+	if l := defaultLog.Load(); l != nil {
+		return l
+	}
+	return nopLog
+}
+
+// createLevelEnablerFunc provides the corresponding package operation.
 func createLevelEnablerFunc(input string) zap.LevelEnablerFunc {
 	if input == "" {
 		return nil
@@ -137,7 +197,7 @@ func createLevelEnablerFunc(input string) zap.LevelEnablerFunc {
 	}
 }
 
-// createEncoder 创建日志编码器：支持 JSON 或控制台格式
+// createEncoder provides the corresponding package operation.
 func createEncoder(format string, isConsole bool) zapcore.Encoder {
 	var cfg zapcore.EncoderConfig
 	if isConsole {
@@ -158,30 +218,34 @@ func createEncoder(format string, isConsole bool) zapcore.Encoder {
 	}
 }
 
-// timeEncoder 时间格式化函数（RFC3339 格式）
+// timeEncoder provides the corresponding package operation.
 func timeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(t.Format(time.RFC3339))
 }
 
-// 以下是对默认 logger 的简化调用封装
+func callerLogger() *zap.Logger {
+	skip := int(defaultCallerSkip.Load())
+	if skip == 0 {
+		return current()
+	}
+	return current().WithOptions(zap.AddCallerSkip(skip))
+}
 
-func Info(msg string, fields ...zapcore.Field)  { defaultLog.Info(msg, fields...) }
-func Debug(msg string, fields ...zapcore.Field) { defaultLog.Debug(msg, fields...) }
-func Warn(msg string, fields ...zapcore.Field)  { defaultLog.Warn(msg, fields...) }
-func Error(msg string, fields ...zapcore.Field) { defaultLog.Error(msg, fields...) }
-func Panic(msg string, fields ...zapcore.Field) { defaultLog.Panic(msg, fields...) }
-func Fatal(msg string, fields ...zapcore.Field) { defaultLog.Fatal(msg, fields...) }
+func Info(msg string, fields ...zapcore.Field)  { callerLogger().Info(msg, fields...) }
+func Debug(msg string, fields ...zapcore.Field) { callerLogger().Debug(msg, fields...) }
+func Warn(msg string, fields ...zapcore.Field)  { callerLogger().Warn(msg, fields...) }
+func Error(msg string, fields ...zapcore.Field) { callerLogger().Error(msg, fields...) }
+func Panic(msg string, fields ...zapcore.Field) { callerLogger().Panic(msg, fields...) }
+func Fatal(msg string, fields ...zapcore.Field) { callerLogger().Fatal(msg, fields...) }
 
-// 支持格式化输出的调用方式
+func Infof(format string, args ...any)  { callerLogger().Sugar().Infof(format, args...) }
+func Debugf(format string, args ...any) { callerLogger().Sugar().Debugf(format, args...) }
+func Warnf(format string, args ...any)  { callerLogger().Sugar().Warnf(format, args...) }
+func Errorf(format string, args ...any) { callerLogger().Sugar().Errorf(format, args...) }
+func Panicf(format string, args ...any) { callerLogger().Sugar().Panicf(format, args...) }
+func Fatalf(format string, args ...any) { callerLogger().Sugar().Fatalf(format, args...) }
 
-func Infof(format string, args ...any)  { defaultLog.Sugar().Infof(format, args...) }
-func Debugf(format string, args ...any) { defaultLog.Sugar().Debugf(format, args...) }
-func Warnf(format string, args ...any)  { defaultLog.Sugar().Warnf(format, args...) }
-func Errorf(format string, args ...any) { defaultLog.Sugar().Errorf(format, args...) }
-func Panicf(format string, args ...any) { defaultLog.Sugar().Panicf(format, args...) }
-func Fatalf(format string, args ...any) { defaultLog.Sugar().Fatalf(format, args...) }
-
-// SyncAll 刷新所有日志缓冲
+// SyncAll provides the corresponding package operation.
 func SyncAll() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -190,4 +254,25 @@ func SyncAll() {
 			_ = l.Sync()
 		}
 	}
+}
+
+// CloseAll flushes registered loggers and closes rotated files. Drain log producers
+// first; do not reuse returned logger pointers after shutdown.
+func CloseAll() error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
+	defaultLog.Store(nil)
+	defaultCallerSkip.Store(0)
+	var result error
+	for _, l := range allLoggers {
+		result = errors.Join(result, l.Sync())
+	}
+	for _, closer := range logClosers {
+		result = errors.Join(result, closer.Close())
+	}
+	allLoggers = nil
+	logClosers = nil
+	return result
 }
