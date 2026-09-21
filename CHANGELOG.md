@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.2 - 2026-09-21
+
+### Fixed
+
+- Avoid unsupported console stderr synchronization errors during shutdown on Windows while retaining file-log synchronization errors.
+
 ## 0.1.1 - 2026-09-07
 
 ### Changed

@@ -32,6 +32,12 @@ const (
 	DefaultFormat  = "json"
 )
 
+type consoleWriteSyncer struct {
+	io.Writer
+}
+
+func (consoleWriteSyncer) Sync() error { return nil }
+
 var (
 	lifecycle         sync.Mutex
 	mu                sync.Mutex
@@ -143,7 +149,7 @@ func (l *Config) newLogger() *zap.Logger {
 		cores = append(cores,
 			zapcore.NewCore(
 				consoleEncoder,
-				zapcore.Lock(os.Stderr),
+				zapcore.Lock(consoleWriteSyncer{Writer: os.Stderr}),
 				consoleLevel,
 			),
 		)

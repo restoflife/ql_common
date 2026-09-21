@@ -20,6 +20,12 @@ import (
 	xlog "xorm.io/xorm/log"
 )
 
+func TestConsoleWriteSyncerDoesNotSync(t *testing.T) {
+	if err := (consoleWriteSyncer{Writer: &bytes.Buffer{}}).Sync(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConfigDefaultsValidationAndRegistration(t *testing.T) {
 	_ = CloseAll()
 	t.Cleanup(func() { _ = CloseAll() })
