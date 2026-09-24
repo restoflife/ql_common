@@ -14,19 +14,19 @@ import (
 )
 
 type reconnectConnector struct{ attempts *atomic.Int32 }
+type reconnectDriver struct{ attempts *atomic.Int32 }
+type reconnectConn struct{ attempts *atomic.Int32 }
+type reconnectTx struct{}
+type reconnectRows struct{ sent bool }
 
 func (c reconnectConnector) Connect(context.Context) (driver.Conn, error) {
 	return &reconnectConn{attempts: c.attempts}, nil
 }
 func (c reconnectConnector) Driver() driver.Driver { return reconnectDriver{attempts: c.attempts} }
 
-type reconnectDriver struct{ attempts *atomic.Int32 }
-
 func (d reconnectDriver) Open(string) (driver.Conn, error) {
 	return &reconnectConn{attempts: d.attempts}, nil
 }
-
-type reconnectConn struct{ attempts *atomic.Int32 }
 
 func (c *reconnectConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("not implemented")
@@ -40,12 +40,8 @@ func (c *reconnectConn) QueryContext(context.Context, string, []driver.NamedValu
 	return &reconnectRows{}, nil
 }
 
-type reconnectTx struct{}
-
 func (reconnectTx) Commit() error   { return nil }
 func (reconnectTx) Rollback() error { return nil }
-
-type reconnectRows struct{ sent bool }
 
 func (*reconnectRows) Columns() []string { return []string{"value"} }
 func (*reconnectRows) Close() error      { return nil }

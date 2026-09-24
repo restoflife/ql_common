@@ -15,6 +15,16 @@ import (
 
 var dbMgr registry.Registry[*xorm.EngineGroup]
 
+type syncFunc func(string, *xorm.EngineGroup) error
+
+// Options provides the corresponding package operation.
+type Options struct {
+	sync syncFunc
+}
+
+// Option provides the corresponding package operation.
+type Option func(*Options)
+
 // MustBootUpXORM is the compatibility entry point. MaxLife is measured in seconds.
 // Deprecated: Use BootUpXORMContext.
 func MustBootUpXORM(configs map[string]*XORMConfigLite, sqlLog *zap.Logger, opts ...Option) error {
@@ -223,16 +233,6 @@ func closeEngineGroup(g *xorm.EngineGroup) error {
 	}
 	return result
 }
-
-type syncFunc func(string, *xorm.EngineGroup) error
-
-// Options provides the corresponding package operation.
-type Options struct {
-	sync syncFunc
-}
-
-// Option provides the corresponding package operation.
-type Option func(*Options)
 
 // SetSyncFunc provides the corresponding package operation.
 func SetSyncFunc(f syncFunc) Option {

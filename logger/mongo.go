@@ -26,6 +26,12 @@ type MongoLogger struct {
 	show   atomic.Bool
 }
 
+// ZapMongoSink provides the corresponding package operation.
+type ZapMongoSink struct {
+	Logger *zap.Logger
+	Plain  *zap.Logger
+}
+
 // NewMongoLogger provides the corresponding package operation.
 func NewMongoLogger(zapLogger *zap.Logger) *MongoLogger {
 	if zapLogger == nil {
@@ -118,12 +124,6 @@ func (m *MongoLogger) ShowMongo(b ...bool) {
 // IsShowMongo provides the corresponding package operation.
 func (m *MongoLogger) IsShowMongo() bool {
 	return m.show.Load()
-}
-
-// ZapMongoSink provides the corresponding package operation.
-type ZapMongoSink struct {
-	Logger *zap.Logger
-	Plain  *zap.Logger
 }
 
 func (z *ZapMongoSink) Info(level int, msg string, keysAndValues ...any) {

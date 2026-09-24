@@ -11,13 +11,17 @@ type tracedError struct {
 	stacktrace string
 }
 
-func (e tracedError) Unwrap() error      { return e.error }
-func (e tracedError) StackTrace() string { return e.stacktrace }
-
 type stackError interface {
 	error
 	StackTrace() string
 }
+
+type unwrapper interface {
+	Unwrap() error
+}
+
+func (e tracedError) Unwrap() error      { return e.error }
+func (e tracedError) StackTrace() string { return e.stacktrace }
 
 // WithStack provides the corresponding package operation.
 func WithStack(err error) error { return WithStackSkip(err, 0) }
@@ -41,7 +45,6 @@ func errorStack(err error) string {
 		if traced, ok := err.(stackError); ok {
 			return traced.StackTrace()
 		}
-		type unwrapper interface{ Unwrap() error }
 		wrapped, ok := err.(unwrapper)
 		if !ok {
 			break

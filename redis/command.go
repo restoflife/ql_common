@@ -5,6 +5,9 @@ import (
 	driver "github.com/redis/go-redis/v9"
 )
 
+// Z is a sorted-set member, usable without importing the Redis driver separately.
+type Z = driver.Z
+
 // DoContext executes an arbitrary Redis command through the registered client.
 // Example: DoContext(ctx, "game", "ZADD", "rank", 100, "123"). Pass arguments separately.
 // Prefer typed helpers for standard commands. The caller handles the returned Redis value.
@@ -27,9 +30,6 @@ func DoContext(ctx context.Context, name string, args ...any) (any, error) {
 
 // Do is the compatibility entry point; HTTP handlers should use DoContext.
 func Do(name string, args ...any) (any, error) { return DoContext(context.Background(), name, args...) }
-
-// Z is a sorted-set member, usable without importing the Redis driver separately.
-type Z = driver.Z
 
 // ZRevRangeContext returns members ordered by descending score (stop is inclusive).
 func ZRevRangeContext(ctx context.Context, name, key string, start, stop int64) ([]string, error) {

@@ -17,23 +17,20 @@ type txState struct {
 	commits, rollbacks     atomic.Int32
 	commitErr, rollbackErr error
 }
+type testDriver struct{ state *txState }
+type testConn struct{ state *txState }
+type testTx struct{ state *txState }
 
 func (c testConnector) Connect(context.Context) (driver.Conn, error) {
 	return &testConn{state: c.state}, nil
 }
 func (c testConnector) Driver() driver.Driver { return testDriver{c.state} }
 
-type testDriver struct{ state *txState }
-
 func (d testDriver) Open(string) (driver.Conn, error) { return &testConn{state: d.state}, nil }
-
-type testConn struct{ state *txState }
 
 func (c *testConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("not implemented") }
 func (c *testConn) Close() error                        { return nil }
 func (c *testConn) Begin() (driver.Tx, error)           { return &testTx{c.state}, nil }
-
-type testTx struct{ state *txState }
 
 func (t *testTx) Commit() error   { t.state.commits.Add(1); return t.state.commitErr }
 func (t *testTx) Rollback() error { t.state.rollbacks.Add(1); return t.state.rollbackErr }
