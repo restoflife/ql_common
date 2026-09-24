@@ -20,7 +20,7 @@ func TestIntegrationCommandsAndRestart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	configs := map[string]*Config{"integration": {Addr: addr}}
-	if err := BootUpRedisContext(ctx, configs); err != nil {
+	if err := BootUpRedisContext(ctx, configs, nil); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -47,7 +47,7 @@ func TestIntegrationCommandsAndRestart(t *testing.T) {
 	if err != nil || result != "2" {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
-	if err := BootUpRedisContext(ctx, configs); !errors.Is(err, ErrDuplicate) {
+	if err := BootUpRedisContext(ctx, configs, nil); !errors.Is(err, ErrDuplicate) {
 		t.Fatal(err)
 	}
 	if err := ShutdownRedisE(); err != nil {
@@ -56,7 +56,7 @@ func TestIntegrationCommandsAndRestart(t *testing.T) {
 	if err := ShutdownRedisE(); err != nil {
 		t.Fatal(err)
 	}
-	if err := BootUpRedisContext(ctx, configs); err != nil {
+	if err := BootUpRedisContext(ctx, configs, nil); err != nil {
 		t.Fatal(err)
 	}
 	if value, err := GetContext(ctx, "integration", key); err != nil || value != "2" {

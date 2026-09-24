@@ -18,11 +18,11 @@ var redisMgr registry.Registry[redis.UniversalClient]
 func MustBootUpRedis(configs map[string]*Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return BootUpRedisContext(ctx, configs)
+	return BootUpRedisContext(ctx, configs, nil)
 }
 
-// BootUpRedisContext initializes a batch atomically without background goroutines.
-func BootUpRedisContext(ctx context.Context, configs map[string]*Config) error {
+// BootUpRedisContext initializes a batch atomically and logs commands only when log is non-nil.
+func BootUpRedisContext(ctx context.Context, configs map[string]*Config, log *zap.Logger) error {
 	if ctx == nil {
 		return ErrNilContext
 	}
@@ -38,7 +38,7 @@ func BootUpRedisContext(ctx context.Context, configs map[string]*Config) error {
 			return configError(name, "invalid pool or database settings")
 		}
 		switch c.Mode {
-		case "", "standalone":
+		case "", STANDALONE:
 			if c.Addr == "" {
 				return configError(name, "address is required")
 			}
@@ -84,6 +84,9 @@ func BootUpRedisContext(ctx context.Context, configs map[string]*Config) error {
 				PoolSize: c.PoolSize, MinIdleConns: c.MinIdle, ContextTimeoutEnabled: true,
 				MaxActiveConns: c.MaxActiveConns, MaxIdleConns: c.MaxIdleConns, ConnMaxIdleTime: c.ConnMaxIdleTime, TLSConfig: c.TLSConfig,
 			})
+		}
+		if log != nil {
+			client.AddHook(logger.NewRedisHook(log))
 		}
 		if err := client.Ping(ctx).Err(); err != nil {
 			_ = client.Close()

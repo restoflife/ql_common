@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.3 - 2026-09-24
+
+### Added
+
+- Add an optional Redis command logging hook through `BootUpRedisContextWithLogger`.
+- Add the `STANDALONE` Redis mode constant.
+
+### Security
+
+- Redis command logs include only command names and safely identified keys; values and complete argument lists are excluded.
+
+### Changed
+
+- Successful Redis commands and pipelines log at Info level; failures log at Error level with the shared logger caller and stacktrace behavior.
+- Redis protocol-negotiation and capability-probe commands are excluded from command logs because older servers may reject them during a successful driver fallback.
+
 ## 0.1.2 - 2026-09-21
 
 ### Fixed

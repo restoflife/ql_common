@@ -17,7 +17,7 @@ var (
 	_ func(context.Context, map[string]*db.XORMConfigLite, *zap.Logger, ...db.Option) error = db.BootUpXORMContext
 	_ func(string) (*xorm.EngineGroup, error)                                               = db.GetEngineGroup
 	_ func() error                                                                          = db.ShutdownXormE
-	_ func(context.Context, map[string]*redis.Config) error                                 = redis.BootUpRedisContext
+	_ func(context.Context, map[string]*redis.Config, *zap.Logger) error                    = redis.BootUpRedisContext
 	_ func(string) (driver.UniversalClient, error)                                          = redis.GetRedis
 	_ func() error                                                                          = redis.ShutdownRedisE
 	_ func(context.Context, map[string]*mongo.Config, *zap.Logger) error                    = mongo.BootUpMongoContext

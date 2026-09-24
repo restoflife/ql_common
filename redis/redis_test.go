@@ -79,10 +79,10 @@ func TestValidationAndCancellation(t *testing.T) {
 	if err := PipelineContext(context.Background(), "missing", nil); err == nil {
 		t.Fatal("nil callback accepted")
 	}
-	if err := BootUpRedisContext(nil, nil); err == nil {
+	if err := BootUpRedisContext(nil, nil, nil); err == nil {
 		t.Fatal("nil context accepted")
 	}
-	if err := BootUpRedisContext(ctx, nil); !errors.Is(err, context.Canceled) {
+	if err := BootUpRedisContext(ctx, nil, nil); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }
