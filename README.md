@@ -38,7 +38,7 @@ func main() {
     defer logger.CloseAll()
 
     startup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    err := cache.BootUpRedisContextWithLogger(startup, map[string]*cache.Config{
+    err := cache.BootUpRedisContext(startup, map[string]*cache.Config{
         "default": {Addr: "127.0.0.1:6379", PoolSize: 10, MinIdle: 2},
     }, logger.Logger())
     cancel()
@@ -56,9 +56,9 @@ func main() {
 }
 ```
 
-`BootUpRedisContext` 保留无命令日志的兼容行为；需要 Redis 命令日志时使用
-`BootUpRedisContextWithLogger`。成功命令记录为 Info，失败命令记录为 Error；
-日志只包含命令名和可安全识别的 Key，不记录 Value 或完整参数。
+Redis 使用 `BootUpRedisContext` 初始化；不需要命令日志时第三个参数传 `nil`。
+成功命令记录为 Info，失败命令记录为 Error；日志只包含命令名和可安全识别的
+Key，不记录 Value 或完整参数。
 
 服务端收到退出信号时：先停止接收请求、等待在途请求结束，再关闭存储连接，
 最后关闭日志。示例中的 defer 不替代 HTTP 服务的 graceful shutdown。

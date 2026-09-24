@@ -21,7 +21,8 @@ func MustBootUpRedis(configs map[string]*Config) error {
 	return BootUpRedisContext(ctx, configs, nil)
 }
 
-// BootUpRedisContext initializes a batch atomically and logs commands only when log is non-nil.
+// BootUpRedisContext initializes a batch atomically. Pass nil to disable
+// command logging; a non-nil logger installs the safe Redis command hook.
 func BootUpRedisContext(ctx context.Context, configs map[string]*Config, log *zap.Logger) error {
 	if ctx == nil {
 		return ErrNilContext

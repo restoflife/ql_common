@@ -4,11 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.4 - 2026-09-24
+
+### Fixed
+
+- Correct the Redis startup documentation: use `BootUpRedisContext(ctx, configs, log)` and pass `nil` as the logger to disable command logging.
+
 ## 0.1.3 - 2026-09-24
 
 ### Added
 
-- Add an optional Redis command logging hook through `BootUpRedisContextWithLogger`.
+- Add an optional Redis command logging hook through `BootUpRedisContext`.
 - Add the `STANDALONE` Redis mode constant.
 
 ### Security
