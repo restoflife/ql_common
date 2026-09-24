@@ -54,10 +54,10 @@ func (h *RedisHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 		fields := redisCommandFields(cmd, time.Since(started))
 		if err != nil {
 			fields = append(fields, zap.Error(err))
-			h.logger.Error("Redis Command Failed", fields...)
+			h.logger.Error(REDIS, fields...)
 			return err
 		}
-		h.plain.Info("Redis Command Executed", fields...)
+		h.plain.Info(REDIS, fields...)
 		return nil
 	}
 }
@@ -78,10 +78,10 @@ func (h *RedisHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.Pr
 		}
 		if visibleErr != nil {
 			fields = append(fields, zap.Error(visibleErr))
-			h.logger.Error("Redis Pipeline Failed", fields...)
+			h.logger.Error(REDIS, fields...)
 			return err
 		}
-		h.plain.Info("Redis Pipeline Executed", fields...)
+		h.plain.Info(REDIS, fields...)
 		return err
 	}
 }

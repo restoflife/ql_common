@@ -28,7 +28,7 @@ func TestRedisHookLogsSafeCommandMetadata(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("expected two entries, got %d", len(entries))
 	}
-	if entries[0].Level != zap.InfoLevel || entries[0].Message != "Redis Command Executed" {
+	if entries[0].Level != zap.InfoLevel || entries[0].Message != REDIS {
 		t.Fatal(entries[0])
 	}
 	fields := entries[0].ContextMap()
@@ -87,7 +87,7 @@ func TestRedisHookPipelineLogsBoundedSafeSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	entry := logs.All()[0]
-	if entry.Level != zap.ErrorLevel || entry.Message != "Redis Pipeline Failed" || entry.Stack == "" {
+	if entry.Level != zap.ErrorLevel || entry.Message != REDIS || entry.Stack == "" {
 		t.Fatal(entry)
 	}
 	fields := entry.ContextMap()

@@ -58,7 +58,7 @@ func (m *MongoLogger) commandStarted(ctx context.Context, evt *event.CommandStar
 	}
 
 	if m.plain.Core().Enabled(zapcore.DebugLevel) {
-		m.plain.Debug("MongoDB Command Started",
+		m.plain.Debug(MONGO,
 			zap.String("database", evt.DatabaseName),
 			zap.String("command", evt.CommandName),
 			zap.String("connection_id", evt.ConnectionID),
@@ -73,7 +73,7 @@ func (m *MongoLogger) commandSucceeded(ctx context.Context, evt *event.CommandSu
 	}
 
 	duration := evt.Duration * time.Nanosecond
-	m.plain.Info("MongoDB Command Executed",
+	m.plain.Info(MONGO,
 		zap.String("command", evt.CommandName),
 		zap.String("database", evt.DatabaseName),
 		zap.String("latency", duration.String()),
@@ -89,7 +89,7 @@ func (m *MongoLogger) commandFailed(ctx context.Context, evt *event.CommandFaile
 
 	duration := evt.Duration * time.Nanosecond
 
-	m.logger.Error("MongoDB Command Failed",
+	m.logger.Error(MONGO,
 		zap.String("command", evt.CommandName),
 		zap.String("database", evt.DatabaseName),
 		zap.String("latency", duration.String()),
@@ -127,7 +127,7 @@ func (m *MongoLogger) IsShowMongo() bool {
 }
 
 func (z *ZapMongoSink) Info(level int, msg string, keysAndValues ...any) {
-	fields := make([]zap.Field, 0)
+	fields := []zap.Field{zap.String("event", msg)}
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i+1 < len(keysAndValues) {
 			fields = append(fields, zap.Any(fmt.Sprintf("%v", keysAndValues[i]), keysAndValues[i+1]))
@@ -137,16 +137,15 @@ func (z *ZapMongoSink) Info(level int, msg string, keysAndValues ...any) {
 	if logger == nil {
 		logger = z.Logger.WithOptions(zap.WithCaller(false))
 	}
-	logger.Info(msg, fields...)
+	logger.Info(MONGO, fields...)
 }
 
 func (z *ZapMongoSink) Error(err error, msg string, keysAndValues ...any) {
-	fields := make([]zap.Field, 0)
-	fields = append(fields, zap.Error(err))
+	fields := []zap.Field{zap.String("event", msg), zap.Error(err)}
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i+1 < len(keysAndValues) {
 			fields = append(fields, zap.Any(fmt.Sprintf("%v", keysAndValues[i]), keysAndValues[i+1]))
 		}
 	}
-	z.Logger.Error(msg, fields...)
+	z.Logger.Error(MONGO, fields...)
 }
