@@ -146,9 +146,9 @@ func WithConfig(log *zap.Logger, conf ConfigGin) gin.HandlerFunc {
 				if stacktrace != "" {
 					fields = append(fields, zap.String("stacktrace", stacktrace))
 				}
-				log.WithOptions(zap.AddStacktrace(zapcore.FatalLevel+1)).Error("[gin]", fields...)
+				log.WithOptions(zap.AddStacktrace(zapcore.FatalLevel+1)).Error(GIN, fields...)
 			} else if statusCode >= http.StatusBadRequest {
-				log.Warn("[gin]",
+				log.Warn(GIN,
 					zap.String("path", fullPath),
 					zap.Int("code", statusCode),
 					zap.String("method", c.Request.Method),
@@ -157,7 +157,7 @@ func WithConfig(log *zap.Logger, conf ConfigGin) gin.HandlerFunc {
 				)
 			} else {
 				// info provides the corresponding package operation.
-				log.Info("[gin]",
+				log.Info(GIN,
 					zap.String("path", fullPath),
 					zap.Int("code", statusCode),
 					zap.String("method", c.Request.Method),

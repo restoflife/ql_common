@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.6 - 2026-09-24
+
+### Changed
+
+- Pad SQL, Redis, MongoDB, and Gin log prefixes to a fixed width so structured fields align in console output.
+
 ## 0.1.5 - 2026-09-24
 
 ### Changed

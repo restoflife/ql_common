@@ -6,9 +6,11 @@ const (
 	// GORM defines the prefix of the log entry from GORM
 	GORM = "[gorm]  "
 	// SQL defines the prefix of the log entry from SQL
-	SQL = "[sql]  "
+	SQL = "[sql]   "
 	// REDIS defines the prefix of Redis command log entries.
-	REDIS = "[redis]  "
+	REDIS = "[redis] "
 	// MONGO defines the prefix of MongoDB command and driver log entries.
-	MONGO = "[mongo]  "
+	MONGO = "[mongo] "
+	// GIN defines the prefix of Gin access log entries.
+	GIN = "[gin]   "
 )
