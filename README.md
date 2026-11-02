@@ -1,7 +1,27 @@
 # ql_common
 
-Go 后端基础组件库：XORM/MySQL、MongoDB、Redis 和 Zap/Gin 日志。
-要求 Go 1.25.0 或更高版本。没有应用入口，不会自动读取配置或启动服务。
+[![CI](https://github.com/restoflife/ql_common/actions/workflows/ci.yml/badge.svg)](https://github.com/restoflife/ql_common/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/restoflife/ql_common.svg)](https://pkg.go.dev/github.com/restoflife/ql_common)
+
+面向 Go 后端服务的基础组件库，统一封装 XORM/MySQL、MongoDB、Redis，以及 Zap/Gin 日志和资源生命周期管理。
+
+项目要求 Go 1.25.0 或更高版本。它是可被业务服务引用的库，没有应用入口，不读取业务配置、不监听端口，也不会自行启动后台服务。
+
+## 安装
+
+```sh
+go get github.com/restoflife/ql_common
+```
+
+调用方负责传入配置、`context.Context` 和可选日志实例，并在请求排空后显式关闭连接与日志资源。
+
+## 设计边界
+
+- 用名称注册和获取 MySQL、MongoDB、Redis 实例，支持同一进程管理多组连接。
+- 初始化按批次发布：整批成功后才对外可见，失败时清理本次已创建资源。
+- 新接口优先接收 `context.Context`，由调用方决定启动、查询和关闭时限。
+- 默认日志避免记录 Redis Value、MongoDB 正文、连接 URI 和 HTTP 查询字符串；业务错误及自行添加的字段仍需调用方脱敏。
+- 不负责配置中心、服务发现、数据库迁移编排、HTTP 服务启动或业务级重试与幂等。
 
 ## 模块
 
