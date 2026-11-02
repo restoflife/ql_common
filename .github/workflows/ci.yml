@@ -20,7 +20,9 @@ jobs:
       - run: go test -race -count=1 ./...
       - run: go test -cover ./...
   integration:
-    runs-on: ubuntu-latest
+    # MongoDB currently refuses to start on the 6.19–7.0.13 kernels used by
+    # newer hosted images. Ubuntu 22.04 remains on a compatible 6.8 kernel.
+    runs-on: ubuntu-22.04
     services:
       mysql:
         image: mysql:8.4
