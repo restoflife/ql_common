@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.8 - 2026-11-16
+
+### Changed
+
+- Rename the structured XORM statement field from `sql` to `command`, matching Redis and MongoDB command logs.
+
 ## 0.1.7 - 2026-11-16
 
 ### Fixed

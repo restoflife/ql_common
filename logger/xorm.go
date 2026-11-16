@@ -49,7 +49,7 @@ func (o *XormLogger) AfterSQL(ctx log.LogContext) {
 		logger = o.logger
 	}
 	if entry := logger.Check(level, SQL); entry != nil {
-		entry.Write(zap.String("sql", sql), zap.String("latency", ctx.ExecuteTime.String()), zap.Error(ctx.Err), zap.Error(convertErr))
+		entry.Write(zap.String("command", sql), zap.String("latency", ctx.ExecuteTime.String()), zap.Error(ctx.Err), zap.Error(convertErr))
 	}
 }
 func (o *XormLogger) Debugf(format string, v ...interface{}) {

@@ -17,7 +17,7 @@ func TestXormLoggerBindsSQLArguments(t *testing.T) {
 		t.Fatal("expected one SQL log")
 	}
 	fields := entries.All()[0].ContextMap()
-	sql, _ := fields["sql"].(string)
+	sql, _ := fields["command"].(string)
 	if !strings.Contains(sql, "player_id=12345") || !strings.Contains(sql, "name='a''b'") || strings.Contains(sql, "?") || fields["latency"] != "1ms" {
 		t.Fatalf("arguments were not bound: %v", fields)
 	}
