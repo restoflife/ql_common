@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.7 - 2026-11-16
+
+### Fixed
+
+- Remove trailing padding from SQL, Redis, and MongoDB structured log messages.
+
 ## 0.1.6 - 2026-09-24
 
 ### Changed

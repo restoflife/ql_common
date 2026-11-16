@@ -1,19 +1,32 @@
 package logger
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestLogPrefixesUseFixedWidth(t *testing.T) {
+func TestTextLogPrefixesUseFixedWidth(t *testing.T) {
 	prefixes := map[string]string{
-		"xorm":  XORM,
-		"gorm":  GORM,
-		"sql":   SQL,
-		"redis": REDIS,
-		"mongo": MONGO,
-		"gin":   GIN,
+		"xorm": XORM,
+		"gorm": GORM,
+		"gin":  GIN,
 	}
 	for name, prefix := range prefixes {
 		if len(prefix) != 8 {
 			t.Errorf("%s prefix width = %d, want 8", name, len(prefix))
+		}
+	}
+}
+
+func TestDatabaseLogPrefixesHaveNoPadding(t *testing.T) {
+	prefixes := map[string]string{
+		"sql":   SQL,
+		"redis": REDIS,
+		"mongo": MONGO,
+	}
+	for name, prefix := range prefixes {
+		if strings.TrimSpace(prefix) != prefix {
+			t.Errorf("%s prefix contains surrounding whitespace: %q", name, prefix)
 		}
 	}
 }
