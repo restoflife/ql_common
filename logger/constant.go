@@ -5,8 +5,8 @@ const (
 	XORM = "[xorm]  "
 	// GORM defines the prefix of the log entry from GORM
 	GORM = "[gorm]  "
-	// SQL defines the prefix of the log entry from SQL
-	SQL = "[sql]"
+	// SQL defines the MySQL command log message.
+	SQL = "[mysql]"
 	// REDIS defines the prefix of Redis command log entries.
 	REDIS = "[redis]"
 	// MONGO defines the prefix of MongoDB command and driver log entries.

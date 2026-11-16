@@ -29,4 +29,7 @@ func TestDatabaseLogPrefixesHaveNoPadding(t *testing.T) {
 			t.Errorf("%s prefix contains surrounding whitespace: %q", name, prefix)
 		}
 	}
+	if SQL != "[mysql]" {
+		t.Errorf("mysql prefix = %q, want %q", SQL, "[mysql]")
+	}
 }

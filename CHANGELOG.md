@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.9 - 2026-11-16
+
+### Changed
+
+- Rename the structured XORM message from `[sql]` to `[mysql]`.
+
 ## 0.1.8 - 2026-11-16
 
 ### Changed
