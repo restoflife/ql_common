@@ -165,6 +165,8 @@ return cursor.Err()
   这样访问日志能观察到恢复中间件设置的 500 状态。
 - `GinLogger` 使用传入 Zap 的目标；`WithWriter` 的显式 writer 替换目标并输出 JSON，
   仍遵守传入 logger 的等级设置。
+- 组件日志消息统一使用无空格补齐的紧凑前缀：`[gin]`、`[mysql]`、`[mongo]`、
+  `[redis]`、`[xorm]` 和 `[gorm]`；结构化字段由 Zap 编码器负责分隔。
 - 默认不记录查询字符串、请求头、Mongo 命令/回复正文或 Mongo URI。SQL 日志会绑定参数，调用方必须避免记录敏感值。
   SQL 文本中的字面量、业务错误、panic 内容和应用自行添加的字段仍可能含敏感数据；
   应使用参数化 SQL，并在业务层脱敏。

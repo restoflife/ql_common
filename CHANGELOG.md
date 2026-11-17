@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.10 - 2026-11-17
+
+### Changed
+
+- Remove fixed-width padding from Gin, XORM, and GORM log messages so all component prefixes use the same compact format.
+
 ## 0.1.9 - 2026-11-16
 
 ### Changed

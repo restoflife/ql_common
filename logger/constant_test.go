@@ -1,35 +1,29 @@
 package logger
 
 import (
-	"strings"
 	"testing"
 )
 
-func TestTextLogPrefixesUseFixedWidth(t *testing.T) {
+func TestLogPrefixesHaveNoPadding(t *testing.T) {
 	prefixes := map[string]string{
-		"xorm": XORM,
-		"gorm": GORM,
-		"gin":  GIN,
+		"xorm":  "[xorm]",
+		"gorm":  "[gorm]",
+		"gin":   "[gin]",
+		"sql":   "[mysql]",
+		"redis": "[redis]",
+		"mongo": "[mongo]",
 	}
-	for name, prefix := range prefixes {
-		if len(prefix) != 8 {
-			t.Errorf("%s prefix width = %d, want 8", name, len(prefix))
-		}
-	}
-}
-
-func TestDatabaseLogPrefixesHaveNoPadding(t *testing.T) {
-	prefixes := map[string]string{
+	actual := map[string]string{
+		"xorm":  XORM,
+		"gorm":  GORM,
+		"gin":   GIN,
 		"sql":   SQL,
 		"redis": REDIS,
 		"mongo": MONGO,
 	}
-	for name, prefix := range prefixes {
-		if strings.TrimSpace(prefix) != prefix {
-			t.Errorf("%s prefix contains surrounding whitespace: %q", name, prefix)
+	for name, expected := range prefixes {
+		if actual[name] != expected {
+			t.Errorf("%s prefix = %q, want %q", name, actual[name], expected)
 		}
-	}
-	if SQL != "[mysql]" {
-		t.Errorf("mysql prefix = %q, want %q", SQL, "[mysql]")
 	}
 }

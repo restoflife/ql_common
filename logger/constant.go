@@ -2,9 +2,9 @@ package logger
 
 const (
 	// XORM defines the prefix of the log entry from XORM
-	XORM = "[xorm]  "
+	XORM = "[xorm]"
 	// GORM defines the prefix of the log entry from GORM
-	GORM = "[gorm]  "
+	GORM = "[gorm]"
 	// SQL defines the MySQL command log message.
 	SQL = "[mysql]"
 	// REDIS defines the prefix of Redis command log entries.
@@ -12,5 +12,5 @@ const (
 	// MONGO defines the prefix of MongoDB command and driver log entries.
 	MONGO = "[mongo]"
 	// GIN defines the prefix of Gin access log entries.
-	GIN = "[gin]   "
+	GIN = "[gin]"
 )
